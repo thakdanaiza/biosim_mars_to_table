@@ -26,6 +26,8 @@ public class BioDriver {
     private boolean simulationIsPaused = false;
     // Flag to see whether the BioDriver is started at all
     private boolean simulationStarted = false;
+    // Flag to see whether the BioDriver has ended due to meeting end criteria
+    private boolean simulationEnded = false;
     // If <runTillN == true, this is the number of ticks to run for.
     private int nTicks = -1;
     // The number of ticks gone by
@@ -116,6 +118,15 @@ public class BioDriver {
      */
     public boolean isStarted() {
         return simulationStarted;
+    }
+
+    /**
+     * Checks to see if the simulation has ended due to meeting end criteria.
+     *
+     * @return <code>true</code> if ended, <code>false</code> if not
+     */
+    public boolean isEnded() {
+        return simulationEnded;
     }
 
     /**
@@ -389,6 +400,7 @@ public class BioDriver {
         myTickThread = null;
         notify();
         simulationStarted = false;
+        simulationEnded = true;
         myLogger.info("BioDriver" + myID + ": simulation ended on tick "
                 + ticksGoneBy);
         if (exitWhenFinished)
@@ -403,6 +415,10 @@ public class BioDriver {
         if (!simulationIsPaused)
             setPauseSimulation(true);
         tick();
+        // Check if an end condition has been met after manual tick
+        if (isDone()) {
+            endSimulation();
+        }
     }
 
     /**
@@ -448,6 +464,7 @@ public class BioDriver {
     public void reset() {
         myLogger.debug("BioDriver" + myID + ": Resetting simulation");
         ticksGoneBy = 0;
+        simulationEnded = false;
         for (IBioModule currentBioModule : modules) {
             myLogger.debug("resetting " + currentBioModule.getModuleName());
             currentBioModule.reset();

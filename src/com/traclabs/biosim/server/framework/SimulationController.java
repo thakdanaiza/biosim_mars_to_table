@@ -320,6 +320,10 @@ public class SimulationController implements TickListener {
                 return;
             }
 
+            // Determine if the run has ended
+            BioDriver bioDriver = simulations.get(simID);
+            boolean runEnded = (bioDriver == null) || bioDriver.isEnded();
+
             // Read configuration XML
             Path configFile = simDirectory.resolve("config.xml");
             String configXML = "";
@@ -364,6 +368,7 @@ public class SimulationController implements TickListener {
             response.put("configXML", configXML);
             response.put("runStarted", runStarted);
             response.put("simID", simID);
+            response.put("runEnded", runEnded);
             response.put("ticks", ticks);
 
             context.json(response);
@@ -771,6 +776,7 @@ public class SimulationController implements TickListener {
         globals.put("myID", bioDriver.getID());
         globals.put("simulationIsPaused", bioDriver.isPaused());
         globals.put("simulationStarted", bioDriver.isStarted());
+        globals.put("simulationEnded", bioDriver.isEnded());
         globals.put("ticksGoneBy", bioDriver.getTicks());
         try {
             Field nTicksField = bioDriver.getClass().getDeclaredField("nTicks");

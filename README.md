@@ -82,8 +82,9 @@ The simulation exposes several REST endpoints:
       "myID": 1,
       "simulationIsPaused": false,
       "simulationStarted": true,
+      "simulationEnded": false,
       "ticksGoneBy": 1367,
-      "nTicks": 0,
+      "runTillN": -1,
       "runTillCrewDeath": true,
       "runTillPlantDeath": false,
       "looping": false,
@@ -104,6 +105,14 @@ The simulation exposes several REST endpoints:
     }
   }
   ```
+
+  **Global Properties:**
+  - `simulationStarted`: Boolean indicating if the simulation has been started
+  - `simulationEnded`: Boolean indicating if the simulation has ended due to meeting end criteria (crew death, plant death, or tick limit)
+  - `simulationIsPaused`: Boolean indicating if the simulation is currently paused
+  - `runTillN`: Number of ticks to run until (-1 if not set)
+  - `runTillCrewDeath`: Boolean indicating if simulation runs until crew death
+  - `runTillPlantDeath`: Boolean indicating if simulation runs until plant death
 
 - **GET** `/api/simulation/{simID}/modules/{moduleName}`  
   Provides detailed information about a specific module, including consumer/producer definitions, flow rate arrays, or store properties if it is a store. E.g.:
@@ -148,7 +157,40 @@ The simulation exposes several REST endpoints:
   curl -X POST http://localhost:8009/api/simulation/1/tick
   ```
 
-- **POST** `/api/simulation/{simID}/modules/{moduleName}/consumers/{type}`  
+- **GET** `/api/simulation/{simID}/log`  
+  Returns the complete run log for a simulation including configuration, run metadata, and all tick data.  
+  **Note:** This endpoint is only available when tick logging is enabled (`--writeTicks`).  
+  **Response:**  
+  JSON containing the simulation log data. E.g.:
+  ```json
+  {
+    "configXML": "<biosim>...</biosim>",
+    "runStarted": "2025-09-02T08:00:00.123456Z",
+    "simID": 1,
+    "runEnded": false,
+    "ticks": [
+      {
+        "tick": 0,
+        "globals": { ... },
+        "modules": { ... }
+      },
+      {
+        "tick": 1,
+        "globals": { ... },
+        "modules": { ... }
+      }
+    ]
+  }
+  ```
+  
+  **Response Fields:**
+  - `configXML`: The XML configuration used to start the simulation
+  - `runStarted`: Timestamp when the simulation run was started
+  - `simID`: The simulation ID
+  - `runEnded`: Boolean indicating if the run has ended. `true` if the simulation is not currently in memory (e.g., after server restart) or if the in-memory simulation has met end criteria; `false` if the simulation is still running in memory
+  - `ticks`: Array of tick data containing simulation state at each tick
+
+- **POST** `/api/simulation/{simID}/modules/{moduleName}/consumers/{type}`
   Updates the consumer definition for a specified module.  
   **Request Body:**  
   A JSON object with the following keys:
