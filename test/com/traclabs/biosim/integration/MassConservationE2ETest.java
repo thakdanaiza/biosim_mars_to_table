@@ -10,7 +10,9 @@ import com.traclabs.biosim.server.simulation.framework.Store;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 public class MassConservationE2ETest {
@@ -79,9 +81,14 @@ public class MassConservationE2ETest {
         assertNotNull(env, "SimEnvironment missing after parse");
 
         double initialTotalMoles = computeTotalMoles(o2Store, co2Store, env);
+        double initialO2StoreMoles = o2Store.getCurrentLevel();
+        double initialEnvironmentO2Moles = env.getO2Store().getCurrentLevel();
+        double initialEnvironmentCO2Moles = env.getCO2Store().getCurrentLevel();
+        double initialCO2StoreMoles = co2Store.getCurrentLevel();
 
         for (int step = 1; step <= N_TICKS; step++) {
             bioDriver.advanceOneTick();
+            assertEquals(step, bioDriver.getTicks(), "BioDriver did not advance the production simulation tick");
 
             assertNonNegative(o2Store, "O2Store", step);
             assertNonNegative(co2Store, "CO2Store", step);
@@ -101,6 +108,15 @@ public class MassConservationE2ETest {
                         step, initialTotalMoles, current, diff, ABS_TOLERANCE_MOLES));
             }
         }
+
+        assertTrue(o2Store.getCurrentLevel() < initialO2StoreMoles,
+                "O2Store did not feed the production simulation");
+        assertTrue(env.getO2Store().getCurrentLevel() > initialEnvironmentO2Moles,
+                "SimEnvironment did not receive O2 during production simulation ticks");
+        assertTrue(env.getCO2Store().getCurrentLevel() < initialEnvironmentCO2Moles,
+                "SimEnvironment did not supply CO2 during production simulation ticks");
+        assertTrue(co2Store.getCurrentLevel() > initialCO2StoreMoles,
+                "CO2Store did not receive CO2 during production simulation ticks");
 
         double finalTotal = computeTotalMoles(o2Store, co2Store, env);
         double finalDiff = finalTotal - initialTotalMoles;
