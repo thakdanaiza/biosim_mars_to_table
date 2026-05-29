@@ -310,6 +310,13 @@ public class CrewGroup extends SimBioModule implements FoodConsumer, AirConsumer
         return totalFoodConsumed;
     }
 
+    public float getFoodMassConsumed() {
+        float totalFoodMassConsumed = 0f;
+        for (CrewPerson currentPerson : crewPeople.values())
+            totalFoodMassConsumed += currentPerson.getFoodMassConsumed();
+        return totalFoodMassConsumed;
+    }
+
     public float getCO2Produced() {
         float totalCO2Produced = 0f;
         for (CrewPerson currentPerson : crewPeople.values())
@@ -322,6 +329,20 @@ public class CrewGroup extends SimBioModule implements FoodConsumer, AirConsumer
         for (CrewPerson currentPerson : crewPeople.values())
             totalO2Consumed += currentPerson.getO2Consumed();
         return totalO2Consumed;
+    }
+
+    public float getVaporProduced() {
+        float totalVaporProduced = 0f;
+        for (CrewPerson currentPerson : crewPeople.values())
+            totalVaporProduced += currentPerson.getVaporProduced();
+        return totalVaporProduced;
+    }
+
+    public float getDryWasteProduced() {
+        float totalDryWasteProduced = 0f;
+        for (CrewPerson currentPerson : crewPeople.values())
+            totalDryWasteProduced += currentPerson.getDryWasteProduced();
+        return totalDryWasteProduced;
     }
 
     public void detachCrewPerson(String name) {

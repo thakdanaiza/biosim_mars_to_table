@@ -159,6 +159,10 @@ public abstract class Plant {
 
     public abstract String getPlantTypeString();
 
+    public float getCurrentTotalWetBiomass() {
+        return myCurrentTotalWetBiomass;
+    }
+
     protected abstract float getInitialPPFValue();
 
     protected abstract float getInitialCO2Value();

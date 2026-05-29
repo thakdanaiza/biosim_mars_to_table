@@ -42,6 +42,10 @@ public class Shelf {
         return myCrop;
     }
 
+    public float getWaterLevel() {
+        return waterLevel;
+    }
+
     public void reset() {
         waterLevel = 0f;
         powerLevel = 0f;
