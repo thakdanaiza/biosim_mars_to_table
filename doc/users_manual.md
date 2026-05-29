@@ -29,8 +29,22 @@
 6. [Running the Simulation](#running-the-simulation)
 7. [Configuring the Simulation](#configuring-the-simulation)
    - [Initial Conditions](#initial-conditions)
-   - [Enabling Stochastic Processes](#enabling-stochastic-processes)
-   - [Logging](#logging)
+   - [Configuration File Structure](#configuration-file-structure)
+   - [Units and Conventions](#units-and-conventions)
+   - [Global Run-Control Settings](#global-run-control-settings)
+   - [Modules, Stores, and Flows](#modules-stores-and-flows)
+   - [Environment Configuration](#environment-configuration)
+   - [Crew Configuration](#crew-configuration)
+   - [Crop and Biomass Configuration](#crop-and-biomass-configuration)
+   - [Air Revitalization Equipment](#air-revitalization-equipment)
+   - [Water Recovery Equipment](#water-recovery-equipment)
+   - [Power Generation and Distribution](#power-generation-and-distribution)
+   - [Waste Processing](#waste-processing)
+   - [Thermal Control](#thermal-control)
+   - [Resource Plumbing (Accumulators, Injectors, Valves)](#resource-plumbing-accumulators-injectors-valves)
+   - [Sensors and Actuators](#sensors-and-actuators)
+   - [Reliability, Malfunctions, and Stochastic Noise](#reliability-malfunctions-and-stochastic-noise)
+   - [Complete Examples](#complete-examples)
 8. [Controlling the Simulation](#controlling-the-simulation)
    - [Controlling Simulation Runs](#controlling-simulation-runs)
    - [Accessing Sensors and Actuators](#accessing-sensors-and-actuators)
@@ -98,7 +112,7 @@ The air component takes in exhalant CO2 and produces O2 as long as there is suff
 **Consumes:** Power, Potable Water, Grey Water, Air  
 **Produces:** Air (with more CO2), Biomass, Dirty Water, CO2, Potable Water
 
-The biomass component is where crops are grown. It produces both biomass, which can be turned into food, and O2 and consumes water, power (light) and CO2. The system is modeled as shelves that contain plants, lights and water. Shelves are planted and harvested and there is growth cycle for each shelf. Currently, ten crops are modeled and can be planted in any ratio.
+The biomass component is where crops are grown. It produces both biomass, which can be turned into food, and O2 and consumes water, power (light) and CO2. The system is modeled as shelves that contain plants, lights and water. Shelves are planted and harvested and there is growth cycle for each shelf. Currently, nine crops are modeled (dry bean, lettuce, peanut, rice, soybean, sweet potato, tomato, wheat, and white potato) and can be planted in any ratio.
 
 #### Food Processing
 
@@ -189,75 +203,650 @@ Please read the [README.md](../README.md) file in the root directory of your Bio
 
 ## Configuring the Simulation
 
-The previous chapter discussed installing and running the default BioSim. This section will discuss configuring BioSim to address specific user interests. This includes changing the underlying producer/consumer relationship, changing the stochastic nature of BioSim and changing the logging of data.
+The previous chapter discussed installing and running the default BioSim. This section is
+a complete reference for what you can configure in a simulation. The start-up state of
+BioSim is controlled by a single XML configuration file that is read during
+initialization, so configuring BioSim means editing (or authoring) that file.
+
+The configurable surface includes:
+
+- **Global run-control settings** (when to stop, pacing, tick length).
+- **Modules and stores** for every subsystem (air, crew, environment, food/biomass,
+  power, water, waste, thermal) plus generic resource "plumbing".
+- **Producer/consumer flow definitions** that wire modules to stores and environments.
+- **Crew** (number, demographics, daily activity schedules).
+- **Crops/biomass** (crop types, growing area, harvest behavior).
+- **Environment** (volume, initial gas composition, day/night, leaks).
+- **Reliability knobs**: scheduled malfunctions, statistical failure deciders, and
+  stochastic (Gaussian) noise.
+- **Sensors and Actuators** (instrumentation and alarm bands used by controllers).
+
+All field names, defaults, enumerated values, and units below are taken from the BioSim
+XML Schema (`etc/schema/`) and the simulation source; that schema is the source of truth.
+
+> BioSim is a research project from NASA Johnson Space Center, developed with TRACLabs,
+> that models an *integrated* Advanced Life Support (ALS) / Environmental Control and Life
+> Support System (ECLSS). The subsystem names used below (OGS, VCCR, CRS, WRS, BWP/RO/AES,
+> etc.) follow the ALS/ECLSS literature; see the
+> [TRACLabs BioSim project page](https://traclabs.com/projects/biosim/) and
+> "[BioSim: An Integrated Simulation of an Advanced Life Support System for Intelligent
+> Control Research](https://traclabs.com/wp-content/uploads/2024/05/isairas_simulation.pdf)"
+> for background. For ARS subsystem terminology (electrolysis-based O2 generation, CO2
+> removal/reduction) see NASA's
+> [ECLSS overview](https://www.nasa.gov/reference/environmental-control-and-life-support-systems-eclss/).
 
 ### Initial Conditions
 
-BioSim is almost infinitely reconfigurable -- from the number of crew members to the size and number of the different modules and should be able to provide scenarios ranging from transit vehicles to Mars colonies. The start-up configuration of BioSim is controlled by an XML file that is read in during BioSim initialization. If you want to change BioSim's configuration you need to change the XML file.
+BioSim is almost infinitely reconfigurable -- from the number of crew members to the size
+and number of the different modules -- and can represent scenarios ranging from transit
+vehicles to Mars colonies. To change BioSim's configuration you change the XML file.
 
-You can use the XML configuration files in the `configurations` directory as templates, modify them, and then provide the path to your configuration when starting the simulation using the `run-simulation` script with the `--config` option.
+The simplest workflow is to start from an existing file in the `configuration/` directory
+(for example `configuration/default.biosim`), copy it, edit it, and then pass it to the
+launcher with the `--config` option:
 
-#### XML File Format
-
-A snippet from a typical initialization XML file might look like this:
-
-```xml
-<SimBioModules>
-  <crew>
-    <CrewGroup name="CrewGroup">
-      <potableWaterConsumer maxFlowRates="100" desiredFlowRates="100" inputs="PotableWaterStore"/>
-      <airConsumer maxFlowRates="0" desiredFlowRates="0" inputs="CrewEnvironment"/>
-      <foodConsumer maxFlowRates="100" desiredFlowRates="100" inputs="FoodStore"/>
-      <dirtyWaterProducer maxFlowRates="100" desiredFlowRates="100" outputs="DirtyWaterStore"/>
-      <greyWaterProducer maxFlowRates="100" desiredFlowRates="100" outputs="GreyWaterStore"/>
-      <airProducer maxFlowRates="0" desiredFlowRates="0" outputs="CrewEnvironment"/>
-      <!-- ... -->
-      <crewPerson name="Bob Roberts" age="43" weight="77" sex="MALE">
-        <schedule>
-          <activity name="sleep" length="8" intensity="1"/>
-          <activity name="hygiene" length="1" intensity="2"/>
-          <activity name="exercise" length="1" intensity="5"/>
-          <activity name="eating" length="1" intensity="2"/>
-          <activity name="mission" length="9" intensity="3"/>
-          <activity name="health" length="1" intensity="2"/>
-          <activity name="maintenance" length="1" intensity="2"/>
-          <activity name="leisure" length="2" intensity="2"/>
-        </schedule>
-      </crewPerson>
-      <!-- ... -->
-    </CrewGroup>
-  </crew>
-  <!-- ... other modules ... -->
-</SimBioModules>
+```bash
+bin/run-simulation --config /path/to/my_scenario.biosim
 ```
 
-This file implements the producer/consumer relationship at the heart of the simulation. Each module has a name and a list of resources that it consumes and produces along with max and desired flow rates and what source(s) produce(s) that resource (the `inputs`) or from where the resource is drawn (`outputs`). More than one source or sink is allowed, but the module tries to draw as much as it can from the first. In the above snippet some flow rates are 0 because the user has no control over them (e.g., crew air consumption is based on crew physiology and can't be directly controlled). As shown above, you can have as many (or as few) crew members as you want of various ages, weights and sexes. You can give a default schedule for their day (which can be changed via the REST API during simulation runs).
+Configuration files conventionally use the `.biosim` extension; older example files use
+`.xml`. Both are plain XML and are read identically.
 
-The best way to change the configuration is to start with an existing file from the `configurations` directory and edit it to reflect your requirements.
+### Configuration File Structure
 
-### Enabling Stochastic Processes
-
-BioSim provides the ability to change the stochastic nature of the underlying modules via the XML initialization file. If you want a purely deterministic simulation you can do that. If you want a very unpredictable simulation you can do that as well. This section provides an overview of the stochastic controls available in BioSim. The type `StochasticIntensity` includes the following values:
-
-- `HIGH_STOCH`
-- `MEDIUM_STOCH`
-- `LOW_STOCH`
-- `NONE_STOCH`
-
-Each of these controls the width of the Gaussian function that provides the variations in output. Setting the stochastic intensity to NONE_STOCH means that the simulation is deterministic. All noise is Gaussian. The outputs of a module as determined by the module's underlying equations are run through a Gaussian filter before being output by the simulation. The Gaussian filter's parameters are controlled by the stochastic intensity, namely the higher the stochastic intensity, the higher the deviation.
-
-#### Setting the Stochastic Intensity via the XML Configuration File
-
-To change the stochastic intensity of a module in XML, simply add setStochasticIntensity as an attribute to the module (if one isn't listed, it defaults to NONE_STOCH). For example:
+A configuration is a single XML document whose root element is `<biosim>`, declared in the
+`http://www.traclabs.com/biosim` namespace and (optionally) pointing at the schema for
+editor validation:
 
 ```xml
-<AirRS name="AirRS" setStochasticIntensity="HIGH_STOCH">
+<?xml version="1.0" encoding="UTF-8"?>
+<biosim xmlns="http://www.traclabs.com/biosim"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.traclabs.com/biosim ../../schema/BiosimInitSchema.xsd">
+  <Globals .../>            <!-- run-control settings (required)        -->
+  <SimBioModules> ... </SimBioModules>  <!-- the modules and stores     -->
+  <Sensors> ... </Sensors>              <!-- optional instrumentation    -->
+  <Actuators> ... </Actuators>          <!-- optional actuators          -->
+</biosim>
 ```
 
-The stochastic level for the entire simulation (which is equivalent to setting each module's stochastic intensity) can be set by adding setStochasticIntensity to the Globals section at the head of the XML document. For example:
+The four children appear in this order. Only `<Globals>` is required; `<SimBioModules>`,
+`<Sensors>`, and `<Actuators>` are each optional (though a useful simulation needs
+modules). Every module and store has a `moduleName` that must be **unique across the whole
+file** -- names are the keys used to wire modules together and to address them over the
+REST API.
+
+### Units and Conventions
+
+| Quantity | Unit | Notes |
+|----------|------|-------|
+| Power | watts (W) | `desiredFlowRates`/`level`/`capacity` on power elements |
+| Liquid water (potable, grey, dirty) | liters (L) | per-tick flow rates are liters/tick |
+| Gases (O2, CO2, H2, N2, water vapor, methane) | moles (mol) | environment composition is in moles or partial-pressure % |
+| Biomass, food, dry waste | kilograms (kg) | |
+| Environment volume | liters (L) | `initialVolume`, `airlockVolume` |
+| Time | ticks | each tick represents `tickLength` hours of model time (default `1`) |
+
+Flow rates are expressed **per tick**. Because each tick equals `tickLength` model hours,
+the amount actually moved per tick is scaled by `tickLength` (e.g. `tickLength="0.1"`
+makes each tick a 6-minute step). `driverStutterLength` is unrelated to model time -- it is
+the wall-clock delay (in milliseconds) the driver waits between automatic ticks.
+
+### Global Run-Control Settings
+
+`<Globals>` controls when and how the run executes. All attributes are optional and fall
+back to the defaults shown.
+
+| Attribute | Type | Default | Meaning |
+|-----------|------|---------|---------|
+| `startPaused` | boolean | `true` | If true, the simulation loads paused and advances only when you call the tick endpoint. |
+| `runTillN` | integer | `-1` | Stop after N ticks. `-1` means no tick limit. |
+| `runTillCrewDeath` | boolean | `true` | Stop the run if any watched crew member dies. |
+| `runTillPlantDeath` | boolean | `false` | Stop the run if any watched crop dies. |
+| `crewsToWatch` | string list | (none) | Space-separated `CrewGroup` module names monitored for crew death. |
+| `plantsToWatch` | string list | (none) | Space-separated `BiomassPS` module names monitored for plant death. |
+| `exitWhenFinished` | boolean | `false` | Exit the server process when the run ends. |
+| `driverStutterLength` | integer (ms) | `-1` | Wall-clock pause between automatic ticks. Values `>= 0` are applied. |
+| `isLooping` | boolean | `false` | Restart the run from the beginning when it ends. |
+| `stochasticIntensity` | enum | `NONE_STOCH` | Schema-level stochastic intensity (`HIGH_STOCH`, `MEDIUM_STOCH`, `LOW_STOCH`, `NONE_STOCH`). See [Reliability, Malfunctions, and Stochastic Noise](#reliability-malfunctions-and-stochastic-noise) for the mechanism actually applied. |
+| `tickLength` | float `>= 0` | `1` | Model hours represented by one tick. Smaller values give finer time resolution. |
+
+`<Globals>` may also contain optional `<comment>` and `<author>` text elements for
+documenting the scenario.
 
 ```xml
-<Globals crewsToWatch="CrewGroup" setStochasticIntensity="LOW_STOCH">
+<Globals crewsToWatch="Crew_Quarters_Group"
+         driverStutterLength="500"
+         runTillCrewDeath="false"
+         tickLength="1"
+         startPaused="false"/>
+```
+
+### Modules, Stores, and Flows
+
+`<SimBioModules>` groups the configurable modules by subsystem. Each group is optional and
+holds a specific set of element types:
+
+| Group | Module / store element types |
+|-------|------------------------------|
+| `<air>` | `OGS`, `VCCR`, `CDRS`, `CRS`, `Pyrolizer`, `O2Store`, `CO2Store`, `H2Store`, `NitrogenStore`, `MethaneStore` |
+| `<water>` | `WaterRS`, `PotableWaterStore`, `GreyWaterStore`, `DirtyWaterStore` |
+| `<power>` | `PowerPS`, `PowerStore`, `GenericPowerConsumer`, `RPCM` |
+| `<food>` | `BiomassPS`, `FoodProcessor`, `BiomassStore`, `FoodStore` |
+| `<crew>` | `CrewGroup` |
+| `<environment>` | `SimEnvironment`, `Dehumidifier`, `Fan` |
+| `<waste>` | `Incinerator`, `DryWasteStore` |
+| `<thermal>` | `IATCS` |
+| `<framework>` | `Accumulator`, `Injector`, `InfluentValve`, `EffluentValve` |
+
+You may include any number of each element type (including several environments, crew
+groups, or stores).
+
+#### Common Module Attributes
+
+Every module and store (anything based on the schema's `BioModuleType`) accepts:
+
+| Attribute | Type | Default | Meaning |
+|-----------|------|---------|---------|
+| `moduleName` | string | (required) | Unique name used for wiring and REST access. |
+| `createLocally` | boolean | `true` | Reserved distribution flag; leave default for normal use. |
+| `logLevel` | enum | `INFO` | `OFF`, `INFO`, `DEBUG`, `ERROR`, `WARN`, `FATAL`, or `ALL`. |
+| `isBionetEnabled` | boolean | `false` | Reserved integration flag. |
+
+Each module may also carry an optional `<malfunction>`, one optional failure decider, and
+one optional `<normalStochasticFilter>` (see
+[Reliability, Malfunctions, and Stochastic Noise](#reliability-malfunctions-and-stochastic-noise)).
+When present, these fault elements must appear **first**, in the order malfunction ->
+failure decider -> stochastic filter, before the module's producer/consumer children
+(and, for sensors, before `<alarms>`).
+
+#### Producer/Consumer Flow Definitions
+
+BioSim modules never talk to each other directly. Instead each module declares the
+resources it **consumes** (pulls from a store/environment) and **produces** (pushes into a
+store/environment). Each consumer/producer is a child element named for its resource, e.g.
+`powerConsumer`, `potableWaterConsumer`, `airConsumer`, `O2Producer`, `CO2Producer`,
+`biomassProducer`, `dryWasteProducer`, and so on.
+
+Every consumer/producer takes the same attributes:
+
+| Attribute | Type | Required | Meaning |
+|-----------|------|----------|---------|
+| `desiredFlowRates` | float list | yes | Amount the module *tries* to move per tick, per connection. |
+| `maxFlowRates` | float list | yes | Hard upper bound per tick, per connection. |
+| `inputs` | string list | consumers | Source store/environment `moduleName`(s) to draw from. |
+| `outputs` | string list | producers | Destination store/environment `moduleName`(s) to push to. |
+
+The lists are **space-separated** and positionally aligned: the *i*-th flow rate applies to
+the *i*-th connection. With multiple connections the module draws (or pushes) as much as it
+can from the first before moving to the next. A flow rate of `0` means the module's value
+is computed internally and cannot be directly commanded (for example, crew air
+consumption is driven by physiology, so its `airConsumer` rate is `0`).
+
+```xml
+<powerConsumer inputs="General_Power_Store" desiredFlowRates="1000" maxFlowRates="1000"/>
+<O2Producer    outputs="O2_Store"           desiredFlowRates="1000" maxFlowRates="1000"/>
+```
+
+When two modules compete for a scarce resource in the same tick, the conflict is currently
+resolved on an effectively random, winner-take-all basis.
+
+#### Stores
+
+Stores hold a single resource. All store types share the `Store` attributes:
+
+| Attribute | Type | Default | Meaning |
+|-----------|------|---------|---------|
+| `capacity` | float `>= 0` | (required) | Maximum amount the store can hold. |
+| `level` | float `>= 0` | (required) | Initial amount in the store. |
+| `resupplyFrequency` | integer `>= 0` | `0` | Resupply interval in ticks (`0` disables resupply). |
+| `resupplyAmount` | float `>= 0` | `0` | Amount added to the store each resupply interval. |
+
+Store types by group: air -- `O2Store`, `CO2Store`, `H2Store`, `NitrogenStore`,
+`MethaneStore`; water -- `PotableWaterStore`, `GreyWaterStore`, `DirtyWaterStore`; power --
+`PowerStore`; food -- `BiomassStore`, `FoodStore` (extra attributes below); waste --
+`DryWasteStore`.
+
+```xml
+<O2Store moduleName="O2_Store" capacity="10000" level="1000"/>
+<PotableWaterStore moduleName="Potable_Water_Store" capacity="10000" level="10000"
+                   resupplyFrequency="24" resupplyAmount="50"/>
+```
+
+### Environment Configuration
+
+A `<SimEnvironment>` is a sealed atmosphere that crew and crops breathe. Multiple
+environments are common (e.g. a crew cabin and a separate plant chamber).
+
+| Attribute | Type | Default | Meaning |
+|-----------|------|---------|---------|
+| `initialVolume` | float | (required) | Atmosphere volume in liters. |
+| `leakRate` | float | `0` | Baseline atmospheric leak rate. |
+| `dayLength` | float | `24` | Length of a day (hours) for the light cycle. |
+| `hourOfDayStart` | float | `0` | Hour of day the simulation starts at. |
+| `maxLumens` | float | `50000` | Peak illumination at solar noon. |
+| `airlockVolume` | float | `3.7` | Volume lost per airlock cycle. |
+| `dangerousOxygenThreshold` | float 0--1 | `1.0` | O2 fraction considered a fire/biological hazard. |
+
+Initial gas composition is set with **one** of two optional child elements (omit both for
+a sea-level-equivalent default):
+
+- `<moleInitialization>` -- absolute amounts, all required:
+  `initialCO2Moles`, `initialO2Moles`, `initialOtherMoles`, `initialWaterMoles`,
+  `initialNitrogenMoles`.
+- `<percentageInitialization>` -- a total pressure plus fractions, all required:
+  `totalPressure`, `co2Percentage`, `o2Percentage`, `otherPercentage`,
+  `waterPercentage`, `nitrogenPercentage`.
+
+```xml
+<SimEnvironment moduleName="Crew_Cabin" initialVolume="2700000" dayLength="24">
+  <percentageInitialization totalPressure="101"
+      o2Percentage="0.21" co2Percentage="0.0004" nitrogenPercentage="0.78"
+      waterPercentage="0.0096" otherPercentage="0.0"/>
+</SimEnvironment>
+```
+
+Two helper modules also live in `<environment>`: `Dehumidifier` (consumes air, produces
+dirty water) and `Fan` (consumes air + power, produces air), each wired with the usual
+producer/consumer children.
+
+### Crew Configuration
+
+A `<CrewGroup>` models a set of astronauts sharing one environment. Beyond the common
+module attributes it adds `isDeathEnabled` (boolean, default `true`). A crew group declares
+the standard crew flows in order -- `potableWaterConsumer`, `airConsumer`, `foodConsumer`,
+`dirtyWaterProducer`, `greyWaterProducer`, `airProducer`, `dryWasteProducer` -- followed by
+any number of `<crewPerson>` elements.
+
+`<crewPerson>` attributes:
+
+| Attribute | Type | Default | Meaning |
+|-----------|------|---------|---------|
+| `name` | string | (required) | Crew member name. |
+| `age` | float `>= 0` | (required) | Age in years. |
+| `weight` | float `>= 0` | (required) | Mass in kilograms. |
+| `sex` | enum | (required) | `MALE` or `FEMALE`. |
+| `arrivalDate` | integer `>= 0` | `0` | Tick the crew member arrives. |
+| `departureDate` | integer | `-1` | Tick the crew member departs (`-1` = never). |
+| `implementation` | enum | `NORMAL` | `NORMAL` or `MATLAB`. |
+
+Each crew member contains a `<schedule>` of one or more `<activity>` elements. Each
+activity has `name` (string), `length` (whole hours), and `intensity` (non-negative
+integer; higher intensity consumes more O2/water/food). A nominal day might be sleep,
+hygiene, exercise, eating, mission, health, maintenance, and leisure; an `EVA` activity may
+additionally name an `evaCrewGroup`. Schedules can also be changed at run time over the
+REST API.
+
+```xml
+<crewPerson name="Buck Rogers" age="35" weight="75" sex="MALE">
+  <schedule>
+    <activity name="sleep"    length="8" intensity="0"/>
+    <activity name="mission"  length="12" intensity="3"/>
+    <activity name="exercise" length="2" intensity="5"/>
+  </schedule>
+</crewPerson>
+```
+
+### Crop and Biomass Configuration
+
+Crops are grown in a `<BiomassPS>` (Biomass Production System). It adds two attributes:
+`autoHarvestAndReplant` (boolean, default `true`) and `isDeathEnabled` (boolean, default
+`true`), and contains any number of `<shelf>` elements followed by its standard flow
+children (`powerConsumer`, `potableWaterConsumer`, `greyWaterConsumer`, `airConsumer`,
+`dirtyWaterProducer`, `biomassProducer`, `airProducer`).
+
+A `<shelf>` is one planted area:
+
+| Attribute | Type | Default | Meaning |
+|-----------|------|---------|---------|
+| `cropType` | enum | (required) | One of the crop types below. |
+| `cropArea` | float `>= 0` | (required) | Growing area (m^2). |
+| `startTick` | integer `>= 0` | `0` | Tick at which this shelf is planted. |
+
+Valid `cropType` values (9): `DRY_BEAN`, `LETTUCE`, `PEANUT`, `RICE`, `SOYBEAN`,
+`SWEET_POTATO`, `TOMATO`, `WHEAT`, `WHITE_POTATO`. Crops can be mixed in any ratio by
+adding multiple shelves.
+
+Biomass becomes food through the optional `<FoodProcessor>` module (consumes biomass +
+power, produces food, dry waste, and water). The related stores carry extra attributes:
+
+- `<BiomassStore>`: `inedibleFraction` (0--1, default `0.25`), `edibleWaterContent`
+  (default `5`), `inedibleWaterContent` (default `5`), `cropType` (default `WHEAT`).
+- `<FoodStore>`: `waterContent` (default `5`), `cropType` (default `WHEAT`).
+
+```xml
+<BiomassPS moduleName="BiomassPS" autoHarvestAndReplant="true">
+  <shelf cropType="SOYBEAN" cropArea="20"/>
+  <shelf cropType="WHEAT"   cropArea="10" startTick="48"/>
+  <powerConsumer        inputs="General_Power_Store" desiredFlowRates="400" maxFlowRates="400"/>
+  <potableWaterConsumer inputs="Potable_Water_Store" desiredFlowRates="100" maxFlowRates="100"/>
+  <greyWaterConsumer    inputs="Grey_Water_Store"    desiredFlowRates="100" maxFlowRates="100"/>
+  <airConsumer          inputs="Crew_Cabin"          desiredFlowRates="0"   maxFlowRates="0"/>
+  <dirtyWaterProducer   outputs="Dirty_Water_Store"  desiredFlowRates="100" maxFlowRates="100"/>
+  <biomassProducer      outputs="Biomass_Store"      desiredFlowRates="100" maxFlowRates="100"/>
+  <airProducer          outputs="Crew_Cabin"         desiredFlowRates="0"   maxFlowRates="0"/>
+</BiomassPS>
+```
+
+### Air Revitalization Equipment
+
+| Module | Role | Required flow children | Special attributes |
+|--------|------|------------------------|--------------------|
+| `OGS` | Oxygen Generation System: electrolyzes water into O2 + H2 | `powerConsumer`, `potableWaterConsumer`, `O2Producer`, `H2Producer` | -- |
+| `VCCR` | Variable Configuration CO2 Removal | `powerConsumer`, `airConsumer`, `airProducer`, `CO2Producer` | `implementation` = `LINEAR` (default) or `DETAILED` |
+| `CDRS` | CO2 Removal System (grey-water variant) | `powerConsumer`, `greyWaterConsumer`, `greyWaterProducer`, `airConsumer`, `airProducer`, `CO2Producer` | -- |
+| `CRS` | CO2 Reduction (Sabatier): CO2 + H2 -> water + methane | `powerConsumer`, `CO2Consumer`, `H2Consumer`, `potableWaterProducer`, `methaneProducer` | -- |
+| `Pyrolizer` | Cracks methane into H2 + dry waste | `powerConsumer`, `methaneConsumer`, `H2Producer`, `dryWasteProducer` | -- |
+
+### Water Recovery Equipment
+
+`<WaterRS>` is the Water Recovery System (its internal subsystems are the Biological Water
+Processor, Reverse Osmosis, Air Evaporation System, and Post-Processing System). Required
+flow children: `powerConsumer`, `dirtyWaterConsumer`, `greyWaterConsumer`,
+`potableWaterProducer`. Special attribute `implementation` = `LINEAR` (default) or
+`NORMAL`.
+
+### Power Generation and Distribution
+
+| Module | Role | Required flow children | Special attributes |
+|--------|------|------------------------|--------------------|
+| `PowerPS` | Power Production System | `powerProducer` (and optional `lightConsumer`) | `generationType` = `NUCLEAR` (default), `SOLAR`, or `STATE_MACHINE`; `upperPowerGeneration` (float, default `500`) |
+| `RPCM` | Remote Power Controller Module (switchable distribution) | `powerConsumer`, `powerProducer` | `switchValues` = list of `0`/`1` |
+| `GenericPowerConsumer` | A generic load | `powerConsumer` | `powerRequired` (float, required) |
+
+`NUCLEAR` supplies a constant amount; `SOLAR` varies with the environment's day/night
+cycle (and may draw from a `lightConsumer`).
+
+### Waste Processing
+
+`<Incinerator>` consumes power, O2, and dry waste and produces CO2. Required flow children:
+`powerConsumer`, `O2Consumer`, `dryWasteConsumer`, `CO2Producer`.
+
+### Thermal Control
+
+`<IATCS>` (Internal Active Thermal Control System) consumes power and grey water and
+returns grey water. Required flow children: `powerConsumer`, `greyWaterConsumer`,
+`greyWaterProducer`.
+
+### Resource Plumbing (Accumulators, Injectors, Valves)
+
+The `<framework>` group provides generic transfer modules that can move *any* resource
+between stores/environments. `Accumulator`, `Injector`, `InfluentValve`, and
+`EffluentValve` each accept any combination of the consumer/producer children for any
+resource (power, the three waters, air, H2, N2, O2, CO2, light, biomass, food, dry waste).
+Accumulators and injectors are functionally equivalent and are typically used to dose a
+resource into an environment.
+
+```xml
+<Injector moduleName="Oxygen_Injector">
+  <O2Consumer inputs="O2_Store"  desiredFlowRates="0.195" maxFlowRates="0.195"/>
+  <O2Producer outputs="Crew_Cabin" desiredFlowRates="0.195" maxFlowRates="0.195"/>
+</Injector>
+```
+
+### Sensors and Actuators
+
+`<Sensors>` and `<Actuators>` describe the instrumentation a controller reads from and
+writes to. Sensors are grouped by subsystem (e.g. `environment`) and include types such as
+`GasConcentrationSensor`, `GasPressureSensor`, and `TotalPressureSensor`; each names the
+module it observes via `input` (and, for gas sensors, a `gasType` such as `CO2`, `O2`, or
+`VAPOR`). A sensor may attach a `<normalStochasticFilter>` to add reading noise and may
+declare `<alarms>` with banded ranges (`watch_low`/`watch_high`,
+`warning_low`/`warning_high`, `distress_low`/`distress_high`,
+`critical_low`/`critical_high`, `severe_low`/`severe_high`), each with `min`/`max` bounds.
+As with any module, the stochastic filter comes before `<alarms>`.
+
+```xml
+<Sensors>
+  <environment>
+    <GasConcentrationSensor input="Crew_Cabin" moduleName="CO2_Sensor" gasType="CO2">
+      <normalStochasticFilter deviation="0.005"/>
+      <alarms>
+        <distress_high min="0.002" max="0.003"/>
+        <critical_high min="0.003" max="0.004"/>
+        <severe_high   min="0.004" max="1"/>
+      </alarms>
+    </GasConcentrationSensor>
+  </environment>
+</Sensors>
+```
+
+### Reliability, Malfunctions, and Stochastic Noise
+
+BioSim models failures three ways. Each is an optional child of a module (or, for stores,
+the same module attributes), and they appear in the order **malfunction -> failure decider
+-> stochastic filter**.
+
+**1. Scheduled malfunctions.** A `<malfunction>` element forces a fault at a known tick:
+
+| Attribute | Values | Meaning |
+|-----------|--------|---------|
+| `intensity` | `SEVERE_MALF`, `MEDIUM_MALF`, `LOW_MALF` | How badly the module is degraded. |
+| `length` | `TEMPORARY_MALF`, `PERMANENT_MALF` | Whether it self-clears or persists. |
+| `occursAtTick` | non-negative integer | Tick at which the malfunction begins. |
+
+```xml
+<VCCR moduleName="Main_VCCR">
+  <malfunction intensity="MEDIUM_MALF" length="PERMANENT_MALF" occursAtTick="200"/>
+  <powerConsumer inputs="General_Power_Store" desiredFlowRates="340" maxFlowRates="1000"/>
+  <airConsumer   inputs="Crew_Cabin" desiredFlowRates="10000" maxFlowRates="10000"/>
+  <airProducer   outputs="Crew_Cabin" desiredFlowRates="10000" maxFlowRates="10000"/>
+  <CO2Producer   outputs="CO2_Store"  desiredFlowRates="10000" maxFlowRates="10000"/>
+</VCCR>
+```
+
+Malfunctions can also be triggered, scheduled, and cleared at run time through the
+[malfunction REST endpoints](../README.md#malfunction-endpoints).
+
+**2. Statistical failure deciders.** Instead of (or in addition to) a fixed tick, a module
+can fail according to a probability distribution. Choose at most one decider; all accept
+`isFailureEnabled` (boolean, default `true`) plus the distribution parameters:
+
+| Element | Required parameters |
+|---------|---------------------|
+| `cauchyFailureDecider` | `mu`, `sd` |
+| `expFailureDecider` | `lambda` |
+| `logisticFailureDecider` | `mu`, `sd` |
+| `lognormalFailureDecider` | `logmean`, `logsd` |
+| `normalFailureDecider` | `logmean`, `logsd` |
+| `uniformFailureDecider` | `alpha`, `beta` |
+| `weibull2FailureDecider` | `lambda`, `beta` |
+| `weibull3FailureDecider` | `lambda`, `beta`, `hold` |
+
+```xml
+<weibull2FailureDecider lambda="0.001" beta="1.5"/>
+```
+
+**3. Stochastic (Gaussian) noise.** Add a `<normalStochasticFilter>` to a module to pass
+its outputs through a Gaussian filter, modeling sensor/process noise:
+
+| Attribute | Type | Default | Meaning |
+|-----------|------|---------|---------|
+| `deviation` | double | (required) | Standard deviation of the Gaussian noise. |
+| `isFilterEnabled` | boolean | `true` | Toggle the filter without removing it. |
+
+```xml
+<normalStochasticFilter deviation="0.05"/>
+```
+
+The schema also defines a `stochasticIntensity` attribute on `<Globals>`
+(`HIGH_STOCH` / `MEDIUM_STOCH` / `LOW_STOCH` / `NONE_STOCH`, default `NONE_STOCH`) intended
+as a simulation-wide setting. In the current build, however, noise is applied per module
+through `<normalStochasticFilter>`; the global application path is not active, so prefer
+the per-module filter when you want noise to take effect. A purely deterministic run uses
+no filters (the default).
+
+### Complete Examples
+
+#### Minimal Configuration
+
+A small but complete, schema-valid closed-loop scenario: one cabin, air revitalization,
+water recovery, nuclear power, a crop shelf, and a single crew member.
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<biosim xmlns="http://www.traclabs.com/biosim"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.traclabs.com/biosim ../../schema/BiosimInitSchema.xsd">
+  <Globals crewsToWatch="Crew_Quarters_Group" runTillCrewDeath="false"
+           tickLength="1" startPaused="false" driverStutterLength="500"/>
+  <SimBioModules>
+    <environment>
+      <SimEnvironment moduleName="Crew_Quarters_Environment" initialVolume="2700000"/>
+    </environment>
+    <air>
+      <CO2Store moduleName="CO2_Store" capacity="1000" level="0"/>
+      <H2Store  moduleName="H2_Store"  capacity="10000" level="0"/>
+      <O2Store  moduleName="O2_Store"  capacity="10000" level="1000"/>
+      <VCCR moduleName="VCCR">
+        <powerConsumer inputs="General_Power_Store" desiredFlowRates="1000" maxFlowRates="1000"/>
+        <airConsumer   inputs="Crew_Quarters_Environment" desiredFlowRates="1000" maxFlowRates="1000"/>
+        <airProducer   outputs="Crew_Quarters_Environment" desiredFlowRates="1000" maxFlowRates="1000"/>
+        <CO2Producer   outputs="CO2_Store" desiredFlowRates="1000" maxFlowRates="1000"/>
+      </VCCR>
+      <OGS moduleName="OGS">
+        <powerConsumer        inputs="General_Power_Store" desiredFlowRates="1000" maxFlowRates="1000"/>
+        <potableWaterConsumer inputs="Potable_Water_Store" desiredFlowRates="10" maxFlowRates="10"/>
+        <O2Producer outputs="O2_Store" desiredFlowRates="1000" maxFlowRates="1000"/>
+        <H2Producer outputs="H2_Store" desiredFlowRates="1000" maxFlowRates="1000"/>
+      </OGS>
+    </air>
+    <water>
+      <PotableWaterStore moduleName="Potable_Water_Store" capacity="10000" level="10000"/>
+      <GreyWaterStore    moduleName="Grey_Water_Store"    capacity="10000" level="10000"/>
+      <DirtyWaterStore   moduleName="Dirty_Water_Store"   capacity="10000" level="0"/>
+    </water>
+    <power>
+      <PowerStore moduleName="General_Power_Store" capacity="100000" level="100000"/>
+      <PowerPS moduleName="Nuclear_Source" generationType="NUCLEAR">
+        <powerProducer outputs="General_Power_Store" desiredFlowRates="3000" maxFlowRates="3000"/>
+      </PowerPS>
+    </power>
+    <food>
+      <FoodStore    moduleName="Food_Store"    capacity="10000" level="10000"/>
+      <BiomassStore moduleName="Biomass_Store" capacity="10000" level="10000"/>
+      <BiomassPS moduleName="BiomassPS" autoHarvestAndReplant="true">
+        <shelf cropType="SOYBEAN" cropArea="1"/>
+        <powerConsumer        inputs="General_Power_Store" desiredFlowRates="400" maxFlowRates="400"/>
+        <potableWaterConsumer inputs="Potable_Water_Store" desiredFlowRates="100" maxFlowRates="100"/>
+        <greyWaterConsumer    inputs="Grey_Water_Store"    desiredFlowRates="100" maxFlowRates="100"/>
+        <airConsumer          inputs="Crew_Quarters_Environment" desiredFlowRates="0" maxFlowRates="0"/>
+        <dirtyWaterProducer   outputs="Dirty_Water_Store"  desiredFlowRates="100" maxFlowRates="100"/>
+        <biomassProducer      outputs="Biomass_Store"      desiredFlowRates="100" maxFlowRates="100"/>
+        <airProducer          outputs="Crew_Quarters_Environment" desiredFlowRates="0" maxFlowRates="0"/>
+      </BiomassPS>
+    </food>
+    <waste>
+      <DryWasteStore moduleName="Dry_Waste_Store" capacity="1000000" level="0"/>
+    </waste>
+    <crew>
+      <CrewGroup moduleName="Crew_Quarters_Group">
+        <potableWaterConsumer inputs="Potable_Water_Store" desiredFlowRates="3" maxFlowRates="3"/>
+        <airConsumer          inputs="Crew_Quarters_Environment" desiredFlowRates="0" maxFlowRates="0"/>
+        <foodConsumer         inputs="Food_Store" desiredFlowRates="5" maxFlowRates="5"/>
+        <dirtyWaterProducer   outputs="Dirty_Water_Store" desiredFlowRates="100" maxFlowRates="100"/>
+        <greyWaterProducer    outputs="Grey_Water_Store"  desiredFlowRates="100" maxFlowRates="100"/>
+        <airProducer          outputs="Crew_Quarters_Environment" desiredFlowRates="0" maxFlowRates="0"/>
+        <dryWasteProducer     outputs="Dry_Waste_Store" desiredFlowRates="10" maxFlowRates="10"/>
+        <crewPerson name="Buck Rogers" age="35" weight="75" sex="MALE">
+          <schedule>
+            <activity name="leisure"  length="12" intensity="2"/>
+            <activity name="sleep"    length="8"  intensity="0"/>
+            <activity name="exercise" length="2"  intensity="5"/>
+          </schedule>
+        </crewPerson>
+      </CrewGroup>
+    </crew>
+  </SimBioModules>
+</biosim>
+```
+
+#### Scheduling a Malfunction
+
+The same scenario with reliability knobs added: the VCCR suffers a permanent medium
+malfunction at tick 200, the OGS carries a Weibull failure decider and Gaussian output
+noise, and a CO2 sensor with alarm bands monitors the cabin.
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<biosim xmlns="http://www.traclabs.com/biosim"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.traclabs.com/biosim ../../schema/BiosimInitSchema.xsd">
+  <Globals crewsToWatch="Crew_Quarters_Group" runTillCrewDeath="true"
+           tickLength="1" startPaused="false" driverStutterLength="200"/>
+  <SimBioModules>
+    <environment>
+      <SimEnvironment moduleName="Crew_Quarters_Environment" initialVolume="2700000"/>
+    </environment>
+    <air>
+      <CO2Store moduleName="CO2_Store" capacity="1000" level="0"/>
+      <H2Store  moduleName="H2_Store"  capacity="10000" level="0"/>
+      <O2Store  moduleName="O2_Store"  capacity="10000" level="1000"/>
+      <VCCR moduleName="Main_VCCR">
+        <malfunction intensity="MEDIUM_MALF" length="PERMANENT_MALF" occursAtTick="200"/>
+        <powerConsumer inputs="General_Power_Store" desiredFlowRates="1000" maxFlowRates="1000"/>
+        <airConsumer   inputs="Crew_Quarters_Environment" desiredFlowRates="1000" maxFlowRates="1000"/>
+        <airProducer   outputs="Crew_Quarters_Environment" desiredFlowRates="1000" maxFlowRates="1000"/>
+        <CO2Producer   outputs="CO2_Store" desiredFlowRates="1000" maxFlowRates="1000"/>
+      </VCCR>
+      <OGS moduleName="OGS">
+        <weibull2FailureDecider lambda="0.001" beta="1.5"/>
+        <normalStochasticFilter deviation="0.05"/>
+        <powerConsumer        inputs="General_Power_Store" desiredFlowRates="1000" maxFlowRates="1000"/>
+        <potableWaterConsumer inputs="Potable_Water_Store" desiredFlowRates="10" maxFlowRates="10"/>
+        <O2Producer outputs="O2_Store" desiredFlowRates="1000" maxFlowRates="1000"/>
+        <H2Producer outputs="H2_Store" desiredFlowRates="1000" maxFlowRates="1000"/>
+      </OGS>
+    </air>
+    <water>
+      <PotableWaterStore moduleName="Potable_Water_Store" capacity="10000" level="10000"/>
+      <GreyWaterStore    moduleName="Grey_Water_Store"    capacity="10000" level="10000"/>
+      <DirtyWaterStore   moduleName="Dirty_Water_Store"   capacity="10000" level="0"/>
+    </water>
+    <power>
+      <PowerStore moduleName="General_Power_Store" capacity="100000" level="100000"/>
+      <PowerPS moduleName="Nuclear_Source" generationType="NUCLEAR">
+        <powerProducer outputs="General_Power_Store" desiredFlowRates="3000" maxFlowRates="3000"/>
+      </PowerPS>
+    </power>
+    <food>
+      <FoodStore moduleName="Food_Store" capacity="10000" level="10000"/>
+    </food>
+    <waste>
+      <DryWasteStore moduleName="Dry_Waste_Store" capacity="1000000" level="0"/>
+    </waste>
+    <crew>
+      <CrewGroup moduleName="Crew_Quarters_Group">
+        <potableWaterConsumer inputs="Potable_Water_Store" desiredFlowRates="3" maxFlowRates="3"/>
+        <airConsumer          inputs="Crew_Quarters_Environment" desiredFlowRates="0" maxFlowRates="0"/>
+        <foodConsumer         inputs="Food_Store" desiredFlowRates="5" maxFlowRates="5"/>
+        <dirtyWaterProducer   outputs="Dirty_Water_Store" desiredFlowRates="100" maxFlowRates="100"/>
+        <greyWaterProducer    outputs="Grey_Water_Store"  desiredFlowRates="100" maxFlowRates="100"/>
+        <airProducer          outputs="Crew_Quarters_Environment" desiredFlowRates="0" maxFlowRates="0"/>
+        <dryWasteProducer     outputs="Dry_Waste_Store" desiredFlowRates="10" maxFlowRates="10"/>
+        <crewPerson name="Wilma Deering" age="35" weight="55" sex="FEMALE">
+          <schedule>
+            <activity name="mission" length="12" intensity="3"/>
+            <activity name="sleep"   length="8"  intensity="0"/>
+            <activity name="leisure" length="4"  intensity="2"/>
+          </schedule>
+        </crewPerson>
+      </CrewGroup>
+    </crew>
+  </SimBioModules>
+  <Sensors>
+    <environment>
+      <GasConcentrationSensor input="Crew_Quarters_Environment" moduleName="CO2_Sensor" gasType="CO2">
+        <normalStochasticFilter deviation="0.005"/>
+        <alarms>
+          <distress_high min="0.002" max="0.003"/>
+          <critical_high min="0.003" max="0.004"/>
+          <severe_high   min="0.004" max="1"/>
+        </alarms>
+      </GasConcentrationSensor>
+    </environment>
+  </Sensors>
+</biosim>
 ```
 
 ## Controlling the Simulation
