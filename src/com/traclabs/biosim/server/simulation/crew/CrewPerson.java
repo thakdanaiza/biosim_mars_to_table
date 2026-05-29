@@ -187,7 +187,7 @@ public class CrewPerson extends BaseCrewPerson {
      * current tick
      */
     public float getDryWasteProduced() {
-        return dirtyWaterProduced;
+        return dryWasteProduced;
     }
 
     /**
@@ -213,6 +213,17 @@ public class CrewPerson extends BaseCrewPerson {
     }
 
     /**
+     * Returns the food mass consumed (in kg) by this crew member during the
+     * current tick.
+     *
+     * @return the food mass consumed (in kg) by this crew member during the
+     * current tick
+     */
+    public float getFoodMassConsumed() {
+        return foodMassConsumed;
+    }
+
+    /**
      * Returns the CO2 produced (in moles) by this crew member during the
      * current tick
      *
@@ -232,6 +243,17 @@ public class CrewPerson extends BaseCrewPerson {
      */
     public float getO2Consumed() {
         return O2Consumed;
+    }
+
+    /**
+     * Returns the water vapor produced (in moles) by this crew member during
+     * the current tick.
+     *
+     * @return the water vapor produced (in moles) by this crew member during
+     * the current tick
+     */
+    public float getVaporProduced() {
+        return vaporProduced;
     }
 
     /**
