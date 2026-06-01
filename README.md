@@ -304,7 +304,7 @@ In addition to the REST API endpoints, there is a WebSocket interface for real-t
 Upon connection, the server immediately sends the current simulation state and then broadcasts further updates on each tick.
 
 ## Configuring BioSim
-For more detailed instructions on configuring BioSim, please refer to the [Users Manual](doc/users_manual.md#configuring-the-simulation). This manual covers configuration options such as initial conditions and stochastic processes.
+For more detailed instructions on configuring BioSim, please refer to the [Users Manual](doc/users_manual.md#configuring-the-simulation). This manual documents the full configuration surface: the XML file structure, global run-control settings, units, modules and stores, producer/consumer flow definitions, crew and crop/biomass setup, environment settings, the power/water/air/waste/thermal/life-support equipment types, and reliability/malfunction/stochastic knobs, with complete examples.
 
 ## License
 GPL v3
