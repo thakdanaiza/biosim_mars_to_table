@@ -166,6 +166,154 @@ then trigger meal process
 3. export หรือแปลงเป็น `meal_schedule.json`
 4. dashboard หรือ scheduler อ่าน schedule แล้ว trigger process เมื่อถึง tick
 
+#### Cooking Schedule vs Eating Schedule
+
+ตอนนี้ BioSim/Version3 ยังไม่มีระบบกำหนดการทำอาหารและกำหนดการกินรายเมนูอยู่จริง ระบบเดิมมีแค่ crew ดึงอาหารจาก `Food_Store` แบบรวม ๆ ตาม `foodConsumer` เท่านั้น
+
+ส่วนที่ควรเพิ่มให้แยกเป็น 2 schedule:
+
+```txt
+Cooking Schedule = เวลาที่เริ่มเตรียม/ทำอาหาร
+Eating Schedule  = เวลาที่ crew กิน/เสิร์ฟอาหาร
+```
+
+เหตุผลที่ต้องแยก:
+
+- บางเมนูต้องเตรียมก่อนกิน เช่น prep 15 นาที cook 20 นาที
+- resource เช่น น้ำ ไฟ และ crew time ควรถูกหักตอนทำอาหาร
+- calories/meal consumption ควรถูกนับตอน crew กิน
+- ถ้าทำไม่เสร็จหรือวัตถุดิบไม่พอ มื้อนั้นควรเป็น `NOT READY`
+
+ตัวอย่าง meal schedule รายมื้อ:
+
+```json
+[
+  {
+    "sol": 1,
+    "mealType": "Breakfast",
+    "mealId": "M01",
+    "mealName": "Oatmeal with Dried Fruit",
+    "cookStartMinute": 450,
+    "serveMinute": 480,
+    "crewGroup": "Crew_Quarters_Group"
+  },
+  {
+    "sol": 1,
+    "mealType": "Lunch",
+    "mealId": "M00",
+    "mealName": "Garden Salad",
+    "cookStartMinute": 690,
+    "serveMinute": 720,
+    "crewGroup": "Crew_Quarters_Group"
+  },
+  {
+    "sol": 1,
+    "mealType": "Dinner",
+    "mealId": "M02",
+    "mealName": "Rice and Beans",
+    "cookStartMinute": 1020,
+    "serveMinute": 1080,
+    "crewGroup": "Crew_Quarters_Group"
+  }
+]
+```
+
+ตัวอย่างเวลามาตรฐานต่อ sol:
+
+| Meal Type | Cook Start | Serve/Eat | หมายเหตุ |
+| --- | ---: | ---: | --- |
+| Breakfast | 07:30 / minute 450 | 08:00 / minute 480 | ใช้เตรียมก่อนกิน 30 นาที |
+| Lunch | 11:30 / minute 690 | 12:00 / minute 720 | เหมาะกับเมนูสดหรือ rehydrate |
+| Dinner | 17:00 / minute 1020 | 18:00 / minute 1080 | เผื่อ cook time นานกว่า |
+
+ถ้าต้องการใช้ tick:
+
+```txt
+absoluteCookTick = ((sol - 1) * 1440) + cookStartMinute
+absoluteServeTick = ((sol - 1) * 1440) + serveMinute
+```
+
+flow ที่ควรเกิดใน scheduler:
+
+```txt
+At cookStartTick:
+  1. อ่าน recipe ของ mealId
+  2. ตรวจ ingredient stock
+  3. ถ้าพอ หัก ingredient, water, power, crew prep/cook time
+  4. สร้าง meal event status = PREPARING หรือ READY
+  5. ถ้าไม่พอ status = NOT READY
+
+At serveTick:
+  1. ตรวจว่า meal status = READY
+  2. ให้ crew consume meal calories หรือหักจาก Food_Store
+  3. เพิ่ม waste จาก serving/leftover/packaging
+  4. บันทึก event status = SERVED หรือ MISSED
+```
+
+ตัวอย่าง `meal_events.jsonl` สำหรับ log:
+
+```json
+{"tick":690,"sol":1,"mealType":"Lunch","mealId":"M00","event":"COOK_START","status":"READY"}
+{"tick":720,"sol":1,"mealType":"Lunch","mealId":"M00","event":"SERVED","status":"SERVED"}
+```
+
+#### Example Daily Meal Plan
+
+ตัวอย่างกำหนดการกิน/ทำอาหาร 1 sol:
+
+```txt
+Sol 1
+  07:30 Cook Breakfast: Oatmeal with Dried Fruit
+  08:00 Eat Breakfast
+
+  11:30 Cook Lunch: Garden Salad
+  12:00 Eat Lunch
+
+  17:00 Cook Dinner: Rice and Beans
+  18:00 Eat Dinner
+```
+
+ตัวอย่างข้อมูลแบบ grouped ต่อวัน:
+
+```json
+{
+  "sol": 1,
+  "meals": [
+    {
+      "mealType": "Breakfast",
+      "mealId": "M01",
+      "mealName": "Oatmeal with Dried Fruit",
+      "cookStartMinute": 450,
+      "serveMinute": 480
+    },
+    {
+      "mealType": "Lunch",
+      "mealId": "M00",
+      "mealName": "Garden Salad",
+      "cookStartMinute": 690,
+      "serveMinute": 720
+    },
+    {
+      "mealType": "Dinner",
+      "mealId": "M02",
+      "mealName": "Rice and Beans",
+      "cookStartMinute": 1020,
+      "serveMinute": 1080
+    }
+  ]
+}
+```
+
+สิ่งที่ dashboard ควรแสดงเพิ่ม:
+
+- current meal
+- next meal
+- cook countdown
+- serve countdown
+- meal readiness: `READY`, `NOT READY`, `PREPARING`, `SERVED`, `MISSED`
+- missing ingredients ถ้าวัตถุดิบไม่พอ
+- water/power/waste ที่ใช้ต่อมื้อ
+
 ### 3. Process Consumption
 
 `Process Consumption` คือการหัก resource ตอนทำอาหาร เช่น วัตถุดิบ น้ำ ไฟ เวลา crew และ waste
